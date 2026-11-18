@@ -135,7 +135,15 @@ body.no3d #c{display:none}
 .fcard.used{opacity:.35;pointer-events:none;box-shadow:none}
 .fcard.dragging{opacity:.4}
 .ghost{position:fixed!important;pointer-events:none;z-index:50;rotate:-2deg;box-shadow:0 14px 28px rgba(0,0,0,.25)!important;left:0;top:0}
-.chip.sesi{background:#FFC93C;color:#3D2A00}
+.chip.sesi{background:#FFC93C;color:#3D2A00}.chip.off{opacity:.35}
+.pickrow{margin:14px 0}.pickrow label{display:block;font:600 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin-bottom:8px}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.seg button{border:1px solid var(--line);background:#fff;border-radius:12px;padding:10px 12px;text-align:left;min-height:64px;transition:.15s}
+.seg button.on{border-color:var(--p);background:var(--pl);box-shadow:0 0 0 2px rgba(16,124,65,.15)}
+.seg b{display:block;font:600 15px 'Poppins'}.seg span{font-size:12px;color:var(--mut);line-height:1.35;display:block}
+.seg2{display:flex;flex-wrap:wrap;gap:6px}
+.seg2 button{border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 12px;font-size:13px;min-height:36px;font-weight:500}
+.seg2 button.on{background:var(--p);color:#fff;border-color:var(--p)}
 .vs{width:100%;border-collapse:collapse;font-size:14px;margin:6px 0 12px}
 .vs th{text-align:left;font-size:12px;color:var(--mut);padding:4px 6px}
 .vs td{padding:6px;border-top:1px solid var(--line);font-family:var(--mono);font-size:13px;width:38%}
@@ -152,6 +160,7 @@ body.no3d #c{display:none}
   .bubble{max-width:200px;font-size:13px}
   .stat{padding:2px 8px}.stat b{font-size:14px}
   .mbox{padding:20px}.mbox h2{font-size:22px}
+  .seg{grid-template-columns:1fr}.seg button{min-height:52px}
   .xcards{position:static}.fslot span{font-size:12px}.fcard{font-size:12px;padding:8px 10px}
 }
 </style>
@@ -168,6 +177,7 @@ body.no3d #c{display:none}
     <div class="stat"><small>Kecewa</small><b id="sK">0</b></div>
     <div class="stat"><small id="sTL">Waktu manual</small><b id="sT">0,0</b></div>
     <button class="ibtn" id="bSfx" aria-label="Suara">🔊</button>
+    <button class="ibtn" id="bMenu" aria-label="Menu pilihan sesi">☰</button>
   </div>
 </div>
 
@@ -495,39 +505,62 @@ const FORM = [
 // =====================================================================
 //  ALUR GAME: Sesi 1 (manual) → Sesi 2 (komputer + rumus)
 // =====================================================================
-const G = { sesi: 1, stage: -1, phase: 'title', queue: [], kecewa: 0, kecewaStage: 0, total: [0, 0, 0], stageTime: 0, handled: 0, spawnT: 0, salah: 0, slotsOk: [],
+const G = { mode: 'full', pilih: [0, 1, 2, 3, 4, 5], idx: 0, sesi: 1, stage: -1, phase: 'title', queue: [], kecewa: 0, kecewaStage: 0, total: [0, 0, 0], stageTime: 0, handled: 0, spawnT: 0, salah: 0, slotsOk: [],
   res: STAGES.map(() => ({ manual: 0, kecewa: 0, rumus: 0, salah: 0 })) };
-function drawChips() { $('#chips').innerHTML = `<span class="chip sesi">SESI ${G.sesi}</span>` + STAGES.map((s, i) => `<span class="chip ${i === G.stage ? 'on' : i < G.stage ? 'done' : ''}">${i + 1} ${s.short === 'COUNTIF & SUMIF' ? 'IF/COUNTIF' : s.short === 'grafik' ? 'GRAFIK' : s.short.split(' ')[0].toUpperCase()}</span>`).join(''); }
+function drawChips() { $('#chips').innerHTML = `<span class="chip sesi">SESI ${G.sesi}</span>` + STAGES.map((s, i) => `<span class="chip ${i === G.stage ? 'on' : !G.pilih.includes(i) ? 'off' : G.pilih.indexOf(i) < G.idx ? 'done' : ''}">${i + 1} ${s.short === 'COUNTIF & SUMIF' ? 'IF/COUNTIF' : s.short === 'grafik' ? 'GRAFIK' : s.short.split(' ')[0].toUpperCase()}</span>`).join(''); }
 function modal(html) { $('#mbox').innerHTML = html; $('#modal').classList.add('on'); const b = $('#mbox [data-go]'); if (b) setTimeout(() => b.focus(), 50); }
 function closeModal() { $('#modal').classList.remove('on'); }
-$('#mbox').addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (!b) return; sfx('click'); ({ start: () => startStage(0), manual: beginManual, formula: beginFormula, next: nextStage, sesi2: () => { G.sesi = 2; startStage(0); }, again: () => location.reload() })[b.dataset.go](); });
+$('#mbox').addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (!b) return; sfx('click'); ({ start: mulai, manual: beginManual, formula: beginFormula, next: nextStage, sesi2: () => { G.sesi = 2; G.idx = 0; startStage(G.pilih[0]); }, menu: goMenu, again: goMenu })[b.dataset.go](); });
+// Pilihan sesi & masalah di layar awal
+$('#mbox').addEventListener('click', e => {
+  const m = e.target.closest('[data-mode]'), k = e.target.closest('[data-pick]');
+  if (m) { sfx('click'); G.mode = m.dataset.mode; $$('[data-mode]').forEach(x => x.classList.toggle('on', x === m)); }
+  if (k) { sfx('click'); G.pilih = k.dataset.pick === 'all' ? [0, 1, 2, 3, 4, 5] : [+k.dataset.pick]; $$('[data-pick]').forEach(x => x.classList.toggle('on', x === k)); }
+  if (m || k) { const b = $('#mbox [data-go="start"]'); if (b) b.textContent = { full: 'Mulai Sesi 1 →', s1: 'Mulai Sesi 1 (manual) →', s2: 'Mulai Sesi 2 (pakai rumus) →' }[G.mode]; }
+});
+$('#bMenu').onclick = () => { sfx('click'); goMenu(); };
+function goMenu() {
+  G.phase = 'title'; G.stage = -1; G.idx = 0; G.sesi = 1; clearQueue(); $('#panel').classList.add('hide'); $('#panel').classList.remove('pc'); setScreen('');
+  drawChips(); title();
+}
+function mulai() {
+  G.sesi = G.mode === 's2' ? 2 : 1; G.idx = 0; G.kecewa = 0; G.total = [0, 0, 0]; G.res = STAGES.map(() => ({ manual: 0, kecewa: 0, rumus: 0, salah: 0 }));
+  $('#sK').textContent = 0; startStage(G.pilih[0]);
+}
 addEventListener('keydown', e => { if (e.key === 'Enter' && $('#modal').classList.contains('on')) { const b = $('#mbox [data-go]'); if (b) b.click(); } });
 const fmtS = s => s.toFixed(1).replace('.', ',');
 const nTugas = i => [STAGES[i].manualN, STAGES[i].manager ? FORM[i].slots.length : 5];
 function setTimeLabel() { $('#sTL').textContent = G.sesi === 1 ? 'Waktu manual' : 'Waktu rumus'; $('#sT').textContent = fmtS(G.total[G.sesi]); }
 
 function title() {
+  const btn = { full: 'Mulai Sesi 1 →', s1: 'Mulai Sesi 1 (manual) →', s2: 'Mulai Sesi 2 (pakai rumus) →' }[G.mode];
+  const semua = G.pilih.length === STAGES.length;
   modal(`<span class="eyebrow">Hook · Informatika Kelas 8</span><h2>Sehari jadi kasir di Jaya Tekno</h2>
-    <p>Kamu baru diterima kerja di toko komputer. Ada <b>6 masalah</b> yang datang hari ini, dan kamu akan menghadapinya <b>dua kali</b>:</p>
-    <div class="cmp"><div class="a"><b style="font-size:20px">Sesi 1</b><span>Kerja MANUAL: cari & hitung pakai mata</span></div><div class="b"><b style="font-size:20px">Sesi 2</b><span>Pakai KOMPUTER & rumus Excel</span></div></div>
-    <div class="list6">${STAGES.map((s, i) => `<div><b>${i + 1}. ${s.tag}</b>${s.judul}</div>`).join('')}</div>
-    <div class="acts"><button class="btn pri" data-go="start">Mulai Sesi 1 →</button></div>`);
+    <p>Kamu baru diterima kerja di toko komputer. Hadapi masalahnya secara <b>manual</b> (Sesi 1), lalu dengan <b>komputer & rumus Excel</b> (Sesi 2).</p>
+    <div class="pickrow"><label>Pilih sesi</label><div class="seg">
+      <button data-mode="full" class="${G.mode === 'full' ? 'on' : ''}"><b>Lengkap</b><span>Sesi 1 lalu Sesi 2, ada perbandingan</span></button>
+      <button data-mode="s1" class="${G.mode === 's1' ? 'on' : ''}"><b>Sesi 1 saja</b><span>Kerja manual pakai mata</span></button>
+      <button data-mode="s2" class="${G.mode === 's2' ? 'on' : ''}"><b>Sesi 2 saja</b><span>Komputer & kartu rumus</span></button></div></div>
+    <div class="pickrow"><label>Pilih masalah</label><div class="seg2"><button data-pick="all" class="${semua ? 'on' : ''}">Semua (6)</button>${STAGES.map((st, i) => `<button data-pick="${i}" class="${!semua && G.pilih[0] === i ? 'on' : ''}">${i + 1}. ${st.tag}</button>`).join('')}</div></div>
+    <div class="acts"><button class="btn pri" data-go="start">${btn}</button></div>`);
 }
 function clearQueue() { G.queue.forEach(p => { p.leaving = true; p.tx = 7; p.tz = -1; p.say = ''; }); G.queue = []; layoutQueue(); }
 function startStage(i) {
   G.stage = i; G.handled = 0; G.kecewaStage = 0; G.stageTime = 0; G.salah = 0; G.phase = 'intro'; drawChips(); setTimeLabel();
   clearQueue(); $('#panel').classList.add('hide'); $('#panel').classList.remove('pc'); setScreen(G.sesi === 2 ? 'fx  ' + STAGES[i].tag : '');
   const s = STAGES[i];
-  if (G.sesi === 1) modal(`<span class="eyebrow">Sesi 1 · Masalah ${i + 1} dari ${STAGES.length} · manual</span><h2>${s.judul}</h2><div class="prob">😩 ${s.masalah}</div>
+  const urut = G.pilih.length > 1 ? ` (${G.idx + 1}/${G.pilih.length})` : '';
+  if (G.sesi === 1) modal(`<span class="eyebrow">Sesi 1 · Masalah ${i + 1}${urut} · manual</span><h2>${s.judul}</h2><div class="prob">😩 ${s.masalah}</div>
     <p class="mut" style="font-size:15px">Kerjakan secara manual. ${s.spawn ? 'Pelanggan punya batas sabar, dan antrean terus bertambah.' : 'Waktu terus berjalan.'}</p>
     <div class="acts"><button class="btn pri" data-go="manual">Kerjakan manual →</button></div>`);
-  else modal(`<span class="eyebrow">Sesi 2 · Masalah ${i + 1} dari ${STAGES.length} · pakai komputer</span><h2>${s.judul}</h2>
-    <p>Di Sesi 1 kamu butuh <b>${fmtS(G.res[i].manual)} detik</b>${G.res[i].kecewa ? ` dan <b>${G.res[i].kecewa}</b> orang kecewa` : ''}. Sekarang pakai komputer kasir.</p>
+  else modal(`<span class="eyebrow">Sesi 2 · Masalah ${i + 1}${urut} · pakai komputer</span><h2>${s.judul}</h2>
+    ${G.res[i].manual ? `<p>Di Sesi 1 kamu butuh <b>${fmtS(G.res[i].manual)} detik</b>${G.res[i].kecewa ? ` dan <b>${G.res[i].kecewa}</b> orang kecewa` : ''}. Sekarang pakai komputer kasir.</p>` : `<div class="prob">😩 ${s.masalah}</div>`}
     <div class="sol">💻 Pilih kartu rumus yang tepat, lalu <b>seret ke kotak fx</b> atau <b>klik</b> kartunya. Hati-hati, ada kartu jebakan!</div>
     <div class="acts"><button class="btn warn" data-go="formula">Nyalakan komputer →</button></div>`);
 }
 function nextStage() {
-  if (G.stage < STAGES.length - 1) return startStage(G.stage + 1);
+  G.idx++;
+  if (G.idx < G.pilih.length) return startStage(G.pilih[G.idx]);
   if (G.sesi === 1) return rekapSesi1();
   finale();
 }
@@ -569,14 +602,14 @@ function afterHandle() {
   setTimeout(() => modal(`<span class="eyebrow">Sesi 1 · Masalah ${G.stage + 1} beres</span><h2>${s.judul}</h2>
     <div class="cmp" style="grid-template-columns:1fr"><div class="a"><b>${fmtS(G.stageTime)} dtk</b><span>kerja manual · ${s.manualN} tugas${G.kecewaStage ? ` · ${G.kecewaStage} orang kecewa` : ''}${G.queue.length ? ` · ${G.queue.length} orang masih antre` : ''}</span></div></div>
     <p style="font-size:15px">Capek? Catat dulu waktunya. Nanti di Sesi 2 kita kerjakan ulang pakai komputer.</p>
-    <div class="acts"><button class="btn pri" data-go="next">${G.stage < STAGES.length - 1 ? 'Masalah berikutnya →' : 'Rekap Sesi 1 →'}</button></div>`), 700);
+    <div class="acts"><button class="btn pri" data-go="next">${G.idx < G.pilih.length - 1 ? 'Masalah berikutnya →' : 'Rekap Sesi 1 →'}</button></div>`), 700);
 }
 function rekapSesi1() {
   G.phase = 'rekap1'; clearQueue();
   modal(`<span class="eyebrow">Rekap Sesi 1 · manual</span><h2>Lumayan melelahkan, ya?</h2>
     <div class="cmp" style="grid-template-columns:1fr 1fr"><div class="a"><b>${fmtS(G.total[1])} dtk</b><span>total kerja manual</span></div><div class="a"><b>${G.kecewa}</b><span>pelanggan/manajer kecewa</span></div></div>
-    <p>Sekarang ulangi <b>6 masalah yang sama</b>, tapi kali ini kamu boleh pakai <b>komputer kasir dan rumus Excel</b>.</p>
-    <div class="acts"><button class="btn warn" data-go="sesi2">Mulai Sesi 2: pakai komputer →</button></div>`);
+    <p>Sekarang ulangi <b>${G.pilih.length > 1 ? G.pilih.length + ' masalah' : 'masalah'} yang sama</b>, tapi kali ini kamu boleh pakai <b>komputer kasir dan rumus Excel</b>.</p>
+    <div class="acts"><button class="btn warn" data-go="sesi2">Mulai Sesi 2: pakai komputer →</button>${G.mode === 's1' ? '<button class="btn sec" data-go="menu">Kembali ke menu</button>' : ''}</div>`);
 }
 
 // ---------- SESI 2: komputer + kartu rumus ----------
@@ -638,11 +671,17 @@ async function finishFormula() {
   } else { await new Promise(r => setTimeout(r, 900)); sfx('cash'); if (G.queue[0]) leave(G.queue[0], 'ok'); }
   await new Promise(r => setTimeout(r, 900));
   const R = G.res[G.stage], [n1, n2] = nTugas(G.stage), p1 = R.manual / n1, p2 = R.rumus / n2, kali = p2 > 0 ? Math.max(1, Math.round(p1 / p2)) : '∞';
+  const lastBtn = G.idx < G.pilih.length - 1 ? 'Masalah berikutnya →' : 'Lihat hasil akhir →';
+  if (!R.manual) return modal(`<span class="eyebrow">Sesi 2 · Masalah ${G.stage + 1} beres · ${s.tag}</span><h2>Beres pakai rumus!</h2>
+    <div class="cmp" style="grid-template-columns:1fr"><div class="b"><b>${fmtS(R.rumus)} dtk</b><span>untuk ${n2} ${s.manager ? 'tugas' : 'pelanggan sekaligus'}${R.salah ? ` · ${R.salah} kartu salah` : ''}</span></div></div>
+    <p style="font-size:15px">${s.solusi}</p><div class="fx">${s.rumus.replace(/([A-Z]+)\(/g, '<span class="fn">$1(</span>')}</div>
+    <p class="mut" style="font-size:14px">Mau merasakan bedanya? Coba juga Sesi 1 (manual) dari menu ☰.</p>
+    <div class="acts"><button class="btn pri" data-go="next">${lastBtn}</button></div>`);
   modal(`<span class="eyebrow">Sesi 2 · Masalah ${G.stage + 1} beres · ${s.tag}</span><h2>Manual vs rumus</h2>
     <div class="cmp"><div class="a"><b>${fmtS(p1)} dtk</b><span>per ${s.manager ? 'tugas' : 'pelanggan'} · Sesi 1 manual<br>(${fmtS(R.manual)} dtk untuk ${n1}${R.kecewa ? `, ${R.kecewa} kecewa` : ''})</span></div><div class="b"><b>${fmtS(p2)} dtk</b><span>per ${s.manager ? 'tugas' : 'pelanggan'} · Sesi 2 rumus<br>(${fmtS(R.rumus)} dtk untuk ${n2}${s.manager ? '' : ' sekaligus'})</span></div></div>
     <p style="font-size:15px">${p1 > p2 ? `Kira-kira <b>${kali}× lebih cepat</b> per ${s.manager ? 'tugas' : 'pelanggan'}. ` : ''}${s.solusi}</p>
     <div class="fx">${s.rumus.replace(/([A-Z]+)\(/g, '<span class="fn">$1(</span>')}</div>
-    <div class="acts"><button class="btn pri" data-go="next">${G.stage < STAGES.length - 1 ? 'Masalah berikutnya →' : 'Lihat perbandingan akhir →'}</button></div>`);
+    <div class="acts"><button class="btn pri" data-go="next">${lastBtn}</button></div>`);
 }
 function tick(dt) {
   if (G.phase === 'formula') { G.stageTime += dt; G.total[2] += dt; $('#sT').textContent = fmtS(G.total[2]); return; }
@@ -665,13 +704,14 @@ function tick(dt) {
 }
 function finale() {
   G.phase = 'end'; G.stage = STAGES.length; drawChips(); $('#panel').classList.add('hide'); clearQueue();
-  const m = G.total[1], r = G.total[2], per = G.res.map((x, i) => { const [a, b] = nTugas(i); return [x.manual / a, x.rumus / b]; }), mx = Math.max(...per.flat(), .1);
-  const t1 = G.res.reduce((s, x, i) => s + nTugas(i)[0], 0), t2 = G.res.reduce((s, x, i) => s + nTugas(i)[1], 0);
+  const m = G.total[1], r = G.total[2], adaManual = G.pilih.some(i => G.res[i].manual > 0);
+  const per = G.pilih.map(i => { const [a, b] = nTugas(i); return [i, G.res[i].manual / a, G.res[i].rumus / b]; }), mx = Math.max(...per.flatMap(x => [x[1], x[2]]), .1);
+  const t1 = G.pilih.reduce((s, i) => s + nTugas(i)[0], 0), t2 = G.pilih.reduce((s, i) => s + nTugas(i)[1], 0);
   modal(`<span class="eyebrow">Perbandingan akhir</span><h2>Kerja pakai mata vs kerja pakai rumus</h2>
-    <div class="cmp"><div class="a"><b>${fmtS(m)} dtk</b><span>Sesi 1 · manual · ${t1} tugas · ${G.kecewa} kecewa</span></div><div class="b"><b>${fmtS(r)} dtk</b><span>Sesi 2 · rumus · ${t2} tugas · 0 kecewa</span></div></div>
-    <table class="vs"><tr><th>Masalah</th><th>Sesi 1 (per tugas)</th><th>Sesi 2 (per tugas)</th></tr>${per.map(([a, b], i) => `<tr><td><b>${STAGES[i].tag}</b></td><td><div class="barx a" style="width:${Math.max(6, a / mx * 100)}%"></div>${fmtS(a)} dtk</td><td><div class="barx b" style="width:${Math.max(6, b / mx * 100)}%"></div>${fmtS(b)} dtk</td></tr>`).join('')}</table>
+    <div class="cmp" style="${adaManual ? '' : 'grid-template-columns:1fr'}">${adaManual ? `<div class="a"><b>${fmtS(m)} dtk</b><span>Sesi 1 · manual · ${t1} tugas · ${G.kecewa} kecewa</span></div>` : ''}<div class="b"><b>${fmtS(r)} dtk</b><span>Sesi 2 · rumus · ${t2} tugas · 0 kecewa</span></div></div>
+    <table class="vs"><tr><th>Masalah</th><th>Sesi 1 (per tugas)</th><th>Sesi 2 (per tugas)</th></tr>${per.map(([i, a, b]) => `<tr><td><b>${STAGES[i].tag}</b></td><td>${a ? `<div class="barx a" style="width:${Math.max(6, a / mx * 100)}%"></div>${fmtS(a)} dtk` : '<span style="color:#9AA9A0">belum dicoba</span>'}</td><td><div class="barx b" style="width:${Math.max(6, b / mx * 100)}%"></div>${fmtS(b)} dtk</td></tr>`).join('')}</table>
     <p>Di Sesi 2 kamu cuma butuh <b>memilih rumus yang tepat</b>, dan komputer yang mengerjakan sisanya, untuk 5 pelanggan sekaligus. Toko sungguhan punya <b>ribuan transaksi</b> per hari. Itulah yang akan kita pelajari hari ini.</p>
-    <div class="acts"><button class="btn pri" data-go="again">Main lagi</button></div>`);
+    <div class="acts"><button class="btn pri" data-go="menu">Kembali ke menu</button></div>`);
   sfx('ok');
 }
 
